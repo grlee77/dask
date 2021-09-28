@@ -2384,8 +2384,10 @@ class Array(DaskMethodsMixin):
             If a tuple or dict then this can be different per axis
         boundary: str, tuple, dict
             How to handle the boundaries.
-            Values include 'reflect', 'periodic', 'nearest', 'none',
-            or any constant value like 0 or np.nan
+            Values include 'reflect', 'periodic', 'nearest', 'mirror', 'none',
+            or any constant value like 0 or np.nan.
+            Modes 'reflect' and 'mirror' are similar except that 'reflect'
+            repeats the value at edge upon reflection while 'mirror' does not.
         trim: bool
             Whether or not to trim ``depth`` elements from each block after
             calling the map function.

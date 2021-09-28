@@ -10,6 +10,7 @@ from dask.array.overlap import (
     boundaries,
     constant,
     ensure_minimum_chunksize,
+    mirror,
     nearest,
     overlap,
     overlap_internal,
@@ -265,6 +266,35 @@ def test_overlap():
     assert g.chunks == ((8, 8), (5, 5))
 
 
+def test_overlap_mirror():
+    x = np.arange(64).reshape((8, 8))
+    d = da.from_array(x, chunks=(4, 4))
+    g = overlap(d, depth={0: 2, 1: 1}, boundary={0: 100, 1: "mirror"})
+    assert g.chunks == ((8, 8), (6, 6))
+    expected = np.array(
+        [
+            [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+            [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+            [1, 0, 1, 2, 3, 4, 3, 4, 5, 6, 7, 6],
+            [9, 8, 9, 10, 11, 12, 11, 12, 13, 14, 15, 14],
+            [17, 16, 17, 18, 19, 20, 19, 20, 21, 22, 23, 22],
+            [25, 24, 25, 26, 27, 28, 27, 28, 29, 30, 31, 30],
+            [33, 32, 33, 34, 35, 36, 35, 36, 37, 38, 39, 38],
+            [41, 40, 41, 42, 43, 44, 43, 44, 45, 46, 47, 46],
+            [17, 16, 17, 18, 19, 20, 19, 20, 21, 22, 23, 22],
+            [25, 24, 25, 26, 27, 28, 27, 28, 29, 30, 31, 30],
+            [33, 32, 33, 34, 35, 36, 35, 36, 37, 38, 39, 38],
+            [41, 40, 41, 42, 43, 44, 43, 44, 45, 46, 47, 46],
+            [49, 48, 49, 50, 51, 52, 51, 52, 53, 54, 55, 54],
+            [57, 56, 57, 58, 59, 60, 59, 60, 61, 62, 63, 62],
+            [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+            [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+        ]
+    )
+    assert_eq(g, expected)
+    assert same_keys(g, overlap(d, depth={0: 2, 1: 1}, boundary={0: 100, 1: "mirror"}))
+
+
 def test_asymmetric_overlap_boundary_exception():
     x = da.arange(10, chunks=5)
     with pytest.raises(NotImplementedError):
@@ -324,7 +354,7 @@ def test_map_overlap_escapes_to_map_blocks_when_depth_is_zero():
 
 
 @pytest.mark.parametrize(
-    "boundary", [None, "reflect", "periodic", "nearest", "none", 0]
+    "boundary", [None, "reflect", "mirror", "periodic", "nearest", "none", 0]
 )
 def test_map_overlap_no_depth(boundary):
     x = da.arange(10, chunks=5)
@@ -507,6 +537,33 @@ def test_map_overlap_deprecated_signature():
         assert y.shape == (3,)
 
 
+def test_map_overlap_reflect_and_mirror():
+    def func(x):
+        return np.array(x.sum())
+
+    # array chosen to give unique result for mirror vs. reflect
+    x = da.asarray([1, 2, 0, 2, 1])
+
+    # Old positional signature: func, depth, boundary, trim
+    y = da.map_overlap(func, x, depth=0, boundary="mirror", trim=True)
+    assert y.compute() == 6
+
+    y = da.map_overlap(func, x, depth=1, boundary="mirror", trim=True)
+    assert y.compute() == 10
+
+    y = da.map_overlap(func, x, depth=2, boundary="mirror", trim=True)
+    assert y.compute() == 10
+
+    y = da.map_overlap(func, x, depth=0, boundary="reflect", trim=True)
+    assert y.compute() == 6
+
+    y = da.map_overlap(func, x, depth=1, boundary="reflect", trim=True)
+    assert y.compute() == 8
+
+    y = da.map_overlap(func, x, depth=2, boundary="reflect", trim=True)
+    assert y.compute() == 12
+
+
 def test_nearest_overlap():
     a = np.arange(144).reshape(12, 12).astype(float)
 
@@ -523,11 +580,15 @@ def test_0_depth():
     depth = {0: 0, 1: 0}
 
     reflected = overlap(darr, depth=depth, boundary="reflect")
+    mirrored = overlap(darr, depth=depth, boundary="mirror")
     nearest = overlap(darr, depth=depth, boundary="nearest")
     periodic = overlap(darr, depth=depth, boundary="periodic")
     constant = overlap(darr, depth=depth, boundary=42)
 
     result = trim_internal(reflected, depth)
+    assert_array_equal(result, expected)
+
+    result = trim_internal(mirrored, depth)
     assert_array_equal(result, expected)
 
     result = trim_internal(nearest, depth)
@@ -547,11 +608,15 @@ def test_some_0_depth():
     depth = {0: 4, 1: 0}
 
     reflected = overlap(darr, depth=depth, boundary="reflect")
+    mirrored = overlap(darr, depth=depth, boundary="mirror")
     nearest = overlap(darr, depth=depth, boundary="nearest")
     periodic = overlap(darr, depth=depth, boundary="periodic")
     constant = overlap(darr, depth=depth, boundary=42)
 
     result = trim_internal(reflected, depth)
+    assert_array_equal(result, expected)
+
+    result = trim_internal(mirrored, depth)
     assert_array_equal(result, expected)
 
     result = trim_internal(nearest, depth)
@@ -585,11 +650,15 @@ def test_depth_equals_boundary_length():
     depth = {0: 5, 1: 5}
 
     reflected = overlap(darr, depth=depth, boundary="reflect")
+    mirrored = overlap(darr, depth=depth, boundary="mirror")
     nearest = overlap(darr, depth=depth, boundary="nearest")
     periodic = overlap(darr, depth=depth, boundary="periodic")
     constant = overlap(darr, depth=depth, boundary=42)
 
     result = trim_internal(reflected, depth)
+    assert_array_equal(result, expected)
+
+    result = trim_internal(mirrored, depth)
     assert_array_equal(result, expected)
 
     result = trim_internal(nearest, depth)
@@ -609,11 +678,15 @@ def test_depth_greater_than_boundary_length():
     depth = {0: 8, 1: 7}
 
     reflected = overlap(darr, depth=depth, boundary="reflect")
+    mirrored = overlap(darr, depth=depth, boundary="mirror")
     nearest = overlap(darr, depth=depth, boundary="nearest")
     periodic = overlap(darr, depth=depth, boundary="periodic")
     constant = overlap(darr, depth=depth, boundary=42)
 
     result = trim_internal(reflected, depth)
+    assert_array_equal(result, expected)
+
+    result = trim_internal(mirrored, depth)
     assert_array_equal(result, expected)
 
     result = trim_internal(nearest, depth)
@@ -731,7 +804,7 @@ def test_overlap_few_dimensions():
     assert len(c.dask) < 10 * len(a.dask)
 
 
-@pytest.mark.parametrize("boundary", ["reflect", "periodic", "nearest", "none"])
+@pytest.mark.parametrize("boundary", ["reflect", "mirror", "periodic", "nearest", "none"])
 def test_trim_boundry(boundary):
     x = da.from_array(np.arange(24).reshape(4, 6), chunks=(2, 3))
     x_overlaped = da.overlap.overlap(x, 2, boundary={0: "reflect", 1: boundary})

@@ -72,6 +72,19 @@ def test_reflect():
     assert_eq(e, expected, check_type=False)
 
 
+def test_mirror():
+    x = cupy.arange(10)
+    d = da.from_array(x, chunks=(5, 5), asarray=False)
+
+    e = da.overlap.mirror(d, axis=0, depth=2)
+    expected = np.array([2, 1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8, 7])
+    assert_eq(e, expected, check_type=False)
+
+    e = da.overlap.mirror(d, axis=0, depth=1)
+    expected = np.array([1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 8])
+    assert_eq(e, expected, check_type=False)
+
+
 def test_nearest():
     x = cupy.arange(10)
     d = da.from_array(x, chunks=(5, 5), asarray=False)

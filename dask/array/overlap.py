@@ -222,6 +222,34 @@ def reflect(x, axis, depth):
     return concatenate([l, x, r], axis=axis)
 
 
+def mirror(x, axis, depth):
+    """Reflect without repetition of the edge values.
+
+    This mode is also known as whole-sample symmetric, while "reflect" is
+    half-sample symmetric.
+
+    Example sequence:  [0, 1, 2, 3, 4]
+    pad by 2 on each end with mirror  -> [2, 1] + [0, 1, 2, 3, 4] + [3, 2]
+    pad by 2 on each end with reflect -> [1, 0] + [0, 1, 2, 3, 4] + [4, 3]
+    """
+    left = (
+        (slice(None, None, None),) * axis
+        + (slice(depth, 0, -1),)
+        + (slice(None, None, None),) * (x.ndim - axis - 1)
+    )
+    right = (
+        (slice(None, None, None),) * axis
+        + (slice(-2, -depth - 2, -1),)
+        + (slice(None, None, None),) * (x.ndim - axis - 1)
+    )
+    l = x[left]
+    r = x[right]
+
+    l, r = _remove_overlap_boundaries(l, r, axis, depth)
+
+    return concatenate([l, x, r], axis=axis)
+
+
 def nearest(x, axis, depth):
     """Each reflect each boundary value outwards
 
@@ -299,6 +327,8 @@ def boundaries(x, depth=None, kind=None):
             x = periodic(x, i, d)
         elif this_kind == "reflect":
             x = reflect(x, i, d)
+        elif this_kind == "mirror":
+            x = mirror(x, i, d)
         elif this_kind == "nearest":
             x = nearest(x, i, d)
         elif i in kind:
@@ -370,8 +400,10 @@ def overlap(x, depth, boundary):
         The size of the shared boundary per axis
     boundary: dict
         The boundary condition on each axis. Options are 'reflect', 'periodic',
-        'nearest', 'none', or an array value.  Such a value will fill the
-        boundary with that value.
+        'mirror', 'nearest', 'none', or an array value.  Such a value will fill
+        the boundary with that value. Modes 'reflect' and 'mirror' are similar
+        except that 'reflect' repeats the value at edge upon reflection while
+        'mirror' does not.
 
     The depth input informs how many cells to overlap between neighboring
     blocks ``{0: 2, 2: 5}`` means share two cells in 0 axis, 5 cells in 2 axis.
@@ -503,10 +535,12 @@ def map_overlap(
         The default value is 0.
     boundary: str, tuple, dict or list
         How to handle the boundaries.
-        Values include 'reflect', 'periodic', 'nearest', 'none',
+        Values include 'reflect', 'periodic', 'nearest', 'mirror', 'none',
         or any constant value like 0 or np.nan.
         If a list then each element must be a str, tuple or dict defining the
         boundary for the corresponding array in `args`.
+        Modes 'reflect' and 'mirror' are similar except that 'reflect' repeats
+        the value at edge upon reflection while 'mirror' does not.
         The default value is 'reflect'.
     trim: bool
         Whether or not to trim ``depth`` elements from each block after
